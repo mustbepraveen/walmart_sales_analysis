@@ -240,9 +240,8 @@ LIMIT 5;
    - **Documentation**: Maintain well-structured documentation of the entire process in VScode(Jupyter Notebook-kernel) and PGadmin
    - **Project Publishing**: Published the completed project on GitHub or any other version control platform, including:
      - The `README.md` file (this document).
-     - Jupyter Notebooks
-     - SQL query scripts
-     - Data files or steps to access them.
+     - Jupyter Notebook
+     - Data file.
 
 ---
     
