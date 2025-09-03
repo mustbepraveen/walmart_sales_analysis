@@ -28,17 +28,17 @@ This project is an end-to-end data analysis solution designed to extract critica
    - **Libraries**: Install necessary Python libraries using:
      ```bash
      pip install pandas
-     pip install pymysql
+     pip install psycopg2-binary
      pip install sqlalchemy
      ```
    - **Loading Data**: Read the data into a Pandas DataFrame for initial analysis and transformations.
 
 ```python
-#importing Dependencies
-import pandas as pd #Process and clean data
-import pymysql #act as an adapter
+
+import pandas as pd
 from sqlalchemy import create_engine #export dataframe from pandas to mysql
 #create_engine feature is imported to make connection with mysql.
+import psychopg2
 ```
 
 ### 5. Explore the Data
@@ -82,7 +82,7 @@ df.info()
 
 ```python
 df.columns
-df['total_price']=df['unit_price'] * df['quantity']
+df['total_amount']=df['unit_price'] * df['quantity']
 df.head()
 df.columns
 df.to_csv('walmart_clean_data.csv', index=False)
@@ -95,17 +95,15 @@ df.to_csv('walmart_clean_data.csv', index=False)
 
 ```python
 #mysql connection
-#mysql+pymysql://user:password@localhost:3306/db_name
-engine_mysql = create_engine("mysql+pymysql://root:rjovia!5@localhost:3306/walmart_db")
+#engine_psql = create_engine("postgresql+psycopg2://postgres:root@localhost:5432/walmart_db")
 
 try:
-
-    engine_mysql
-    print("connection succeeded")
+    engine_psql
+    print("connection successful")
 except:
-    print("unable to connect")
+    print("connection failed")
 
-df.to_sql(name='walmart', con=engine_mysql, if_exists='append', index =False)
+df.to_sql(name="walmart" , con=engine_psql , if_exists = 'append', index='False')
 ```
 
 ### 9. SQL Analysis: Complex Queries and Business Problem Solving
@@ -118,188 +116,133 @@ df.to_sql(name='walmart', con=engine_mysql, if_exists='append', index =False)
 
 ```sql
 -- Basic Exploration of data in mysql
-use walmart_db;
-select * from walmart;
+SELECT * FROM walmart;
 
-select count(*) from walmart;
+SELECT DISTINCT(payment_method),COUNT(*)
+FROM walmart
+GROUP BY payment_method;
 
-#Find the number of sales from different payment methods.
-select 
-     count(*),
-     payment_method
-     from walmart
-	group by payment_method;
-    
-#Find the number of distinct Branchat which order is made.
-select
-     count(distinct Branch)
-from walmart;
+SELECT DIsTINCT(branch),COUNT(*)
+FROM walmart
+GROUP BY branch;
 
-#Find the the minimum and maximum number of quantities ordered.
-select min(quantity),max(quantity) from walmart;
+SELECT MIN(quantity)
+FROM walmart;
 ```
 ### Business Problems
 
-**1. Find the different payment method and their number of transaction, number of quantity sold.**
+**Find different payment methods,number of transactions and total quantity sold.**
 ```sql
-select 
-payment_method ,
-count(invoice_id) as Transactions,
-Sum(quantity) as Quantity_Sold
-from walmart
-group by payment_method
+SELECT DISTINCT(payment_method), COUNT(*) AS Total_Transactions, SUM(quantity) AS Total_Quantity
+FROM walmart
+GROUP BY payment_method;
 ```
 
-**2. Find the highest rated category in each branch displaying branch, category and avg rating.**
+**Find the highest-rated category in each branch,displaying the branch, category and average rating**
 ```sql
-select branch,
-     category,
-     Rating_Average
-from
-(select branch,
-     category,
-     avg(rating) as Rating_Average,
-     rank() over (partition by branch order by avg(rating) desc) as Ranking
-from walmart
-group by branch, category) as t1 where Ranking = 1
+WITH CTE AS (
+SELECT branch,
+       category,
+	   ROUND(CAST(AVG(rating) AS INTEGER),2) AS average_rating,
+	   DENSE_RANK() OVER(PARTITION BY branch ORDER BY AVG(rating) ) AS rank
+FROM walmart
+GROUP BY branch,category)
+
+SELECT branch,category,average_rating
+FROM CTE
+WHERE rank = 1;
 ```
 
-**3. Find the busiest day for each branch based on number of transactions. 
-    Also find at which day of the week , most transactions are completed .**
+**Identify the busiest day for each branch based on number of transactions**
 ```sql
-select branch ,
-     Day,
-     No_of_Transaction
-from
-(select branch ,
-     dayname(date) as Day,
-     count(invoice_id) as No_of_Transaction,
-     rank() over (partition by branch order by count(invoice_id) desc) as ranking
-from walmart
-group by branch, Day) as t1
-where ranking = 1;
+SELECT branch,day,total_transactions
+FROM(
+       SELECT 	branch,TO_CHAR(TO_DATE(date , 'DD/MM/YY') , 'day') AS day,COUNT(*) AS total_transactions,
+                DENSE_RANK() OVER(PARTITION BY branch ORDER BY COUNT(*) ) AS rank
+                FROM walmart
+                GROUP BY branch,day
+)
+WHERE rank = 1;
 ```
+**Identify different payment method and quantity sold by each payment method**
 ```sql
-select Day , 
-     sum(No_of_Transaction)
-     from(
-select branch ,
-     Day,
-     No_of_Transaction
-from
-(select branch ,
-     dayname(date) as Day,
-     count(invoice_id) as No_of_Transaction,
-     rank() over (partition by branch order by count(invoice_id) desc) as ranking
-from walmart
-group by branch, Day) as t1
-where ranking = 1)
-as t2 group by 1
-order by 2  desc;
+SELECT DISTINCT(payment_method),SUM(quantity) AS total_quantity_sold
+FROM walmart
+GROUP BY payment_method;
 ```
 
-**4. Calculate the total quantity of items sold per payment method.**
+**Determine the average,minimum and maximum rating for each city.
+List the city,average rating,minimum rating and maximum rating.**
 ```sql
-select payment_method,
-     sum(quantity) as Total_quantity
-from walmart
-group by payment_method;
+SELECT city,category,ROUND(CAST(AVG(rating) AS INTEGER),2),MIN(rating),MAX(rating)
+FROM walmart
+GROUP BY city,category;
 ```
 
-**5. Determine the average, minimum and maximum rating of category for each city.
-List the city, category, average_rating,minimum_rating and maximum_rating.**
+**Calculate the total profit for each category by considering total_profit as (unit price * quantity * profit_margin).Order the result by highest to lowest profit.**
 ```sql
-select city,
-     category,
-     avg(rating) as average_rating,
-     min(rating) as minimum_rating,
-     max(rating) as maximum_rating
-from walmart 
-group by city, category;
+SELECT category, ROUND(CAST(SUM(unit_price*quantity*profit_margin) AS INTEGER),2) AS total_profit
+FROM walmart
+GROUP BY category
+ORDER BY total_profit;
 ```
 
-**6. Calculate the total profit for each category. 
-List total_profit and category ordered from hghest to lowest.**
+**Find the most common payment method for each branch and display the branch and preferred_payment_method.**
 ```sql
-select category , 
-      sum(total_price * profit_margin) as total_profit
-from walmart group by category
-order by 2 desc;
+SELECT branch,payment_method AS preferred_payment_method,total_payments FROM(
+SELECT branch,payment_method,COUNT(payment_method) AS total_payments,DENSE_RANK() OVER(PARTITION BY branch ORDER BY COUNT(payment_method)) AS rank
+FROM walmart
+GROUP BY branch,payment_method)
+WHERE rank = 1;
 ```
 
-**7. Display the most common payment method for each branch. 
-list the branch and preffered_payment_method.**
+**Categorize sales into 3 groups Morning,Afternoon and Evening and also calculate the number of invoices for each category**
 ```sql
-select branch ,
-payment_method as preffered_payment_method
-from
-(select branch ,
-payment_method,
-count(*) as no_of_tranaction,
-rank() over(partition by branch order by count(*) desc) as Ranking
-from walmart 
-group by 1,2) as t1
-where Ranking =1;
-```
-```sql
-With cte 
-as
-(select branch ,
-payment_method,
-count(*) as no_of_tranaction,
-rank() over(partition by branch order by count(*) desc) as Ranking
-from walmart 
-group by 1,2)
-
-select * from cte where 
-Ranking =1;
+SELECT branch,
+       CASE WHEN EXTRACT(HOUR FROM time::time) < 12 THEN 'Morning'
+	        WHEN EXTRACT(HOUR FROM time::time) BETWEEN 13 AND 17 THEN 'Afternoon'
+			ELSE 'Evening'
+	   END AS timeotheday,COUNT(*) AS total_transactions
+FROM walmart
+GROUP BY 1,2;
 ```
 
-**8. Categorize sales into three groups MORING, AFTERNOON, EVENING
-Find out each of the shift for different branch and their no. of invoices.**
-```sql
-select branch ,
-CASE 
-           WHEN (HOUR) < 12 Then 'Morning'
-           WHEN (HOUR) Between 12 and 17 Then 'Afternoon'
-           Else 'Evening'
-	 End as shift_of_the_day,
-     count(*)
-     from
-     (select branch,
-     time, 
-     hour(time) as HOUR from walmart)
-     as t1
-
-group by 1,2
-order by 1,3 desc;
-```
-
-**9. Which one of th following is the highest performing branch.
-Also how much above the avg. revenue produced by a branch.**
+**Identify 5 branches with highest decrease ratio in revenue as compared to last year (this year 2023 and last year 2022)**
 
 ```sql
-select branch ,
-     sum(total_price) as revenue 
-from walmart 
-group by branch 
-order by revenue desc;
+WITH revenue_2023 AS(
+SELECT branch,
+       SUM(total_amount) AS revenue
+FROM walmart
+WHERE EXTRACT(YEAR FROM TO_Date(Date , 'DD/MM/YY')) = 2023
+GROUP BY branch
+)
+,revenue_2022 AS(
+SELECT branch,
+       SUM(total_amount) AS revenue
+FROM walmart
+WHERE EXTRACT(YEAR FROM TO_Date(Date , 'DD/MM/YY')) = 2022
+GROUP BY branch
+)
 
-select avg(revenue)
-from(select branch ,
-     sum(total_price) as revenue 
-from walmart 
-group by branch 
-order by revenue desc)
-as t1;
+SELECT ly.branch,
+       ly.revenue AS last_year_revenue,
+	   cy.revenue AS current_year_revenue,
+	   ROUND((ly.revenue - cy.revenue)::numeric/ly.revenue::numeric*100,2) AS revenue_decrease_ratio
+FROM revenue_2022 AS ly
+INNER JOIN revenue_2023 AS cy
+ON ly.branch = cy.branch
+WHERE ly.revenue > cy.revenue
+ORDER BY 4 DESC
+LIMIT 5;
 ```
 ### 10. Project Publishing and Documentation
-   - **Documentation**: Maintain well-structured documentation of the entire process in VScode(Jupyter Notebook-kernel) and mysql Workbench.
-   - **Project Publishing**: Publish the completed project on GitHub or any other version control platform, including:
+   - **Documentation**: Maintain well-structured documentation of the entire process in VScode(Jupyter Notebook-kernel) and PGadmin
+   - **Project Publishing**: Published the completed project on GitHub or any other version control platform, including:
      - The `README.md` file (this document).
-     - Jupyter Notebooks (if applicable).
-     - SQL query scripts.
-     - Data files (if possible) or steps to access them.
+     - Jupyter Notebooks
+     - SQL query scripts
+     - Data files or steps to access them.
 
 ---
     
