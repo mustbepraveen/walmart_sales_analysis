@@ -10,7 +10,7 @@ This project is an end-to-end data analysis solution designed to extract critica
 ![Project Layout](https://github.com/i-am-rahularora5504/Walmart_Sales_SQL_Python_Project/blob/main/walmart_project_layout.png)
 
 ### 1. Set Up the Environment (my_env1)
-   - **Tools Used**: Visual Studio Code (VS Code), Python, SQL (MySQL)
+   - **Tools Used**: Visual Studio Code (VS Code), Python, SQL (Postgresql)
    - **Goal**: Create a structured workspace within VS Code and organize project folders for smooth development and data handling.
 
 ### 2. Set Up Kaggle API
